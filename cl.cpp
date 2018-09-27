@@ -7,12 +7,11 @@ using namespace std;
 //-----------------------------------------------------------------------------
 // Initialize OpenCL
 //-----------------------------------------------------------------------------
+
 void initOpenCL(
-	CommandQueue & queue,
 	Device & device,
 	Context & context,
-	Program & program,
-	const char* source_filename) {
+	CommandQueue & queue) {
 
 	// Get all available OpenCL platforms
 	vector<Platform> platforms;
@@ -72,7 +71,14 @@ void initOpenCL(
 	// Create an OpenCL context and command queue on the device
 	context = Context(device, properties);
 	queue = CommandQueue(context, device);
+}
 
+//-----------------------------------------------------------------------------
+// Compile program & Add program to kernel
+//-----------------------------------------------------------------------------
+
+void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_entry_name, Kernel & kernel)
+{
 	// Convert the OpenCL source code to a string
 	ifstream source_file(source_filename, std::ios::in);
 	if (!source_file) { cerr << "Cannot find kernel code: " << source_filename << "\n"; exit(1); }
@@ -80,15 +86,19 @@ void initOpenCL(
 	const char* kernel_source = source_string.c_str();
 
 	// Create an OpenCL program by performing runtime compilation for the chosen device
-	program = Program(context, kernel_source);
-	cl_int result = program.build( { device } );
+	Program program = Program(clInfo.context, kernel_source);
+	cl_int result = program.build( { clInfo.device } );
 	if (result) cout << "Error during compilation OpenCL code!\n (" << result << ")\n";
-	if (result == CL_BUILD_PROGRAM_FAILURE) { printErrorLog(program, device); exit(1); }
+	if (result == CL_BUILD_PROGRAM_FAILURE) { printErrorLog(program, clInfo.device); exit(1); }
+
+	// Add program to kernel
+	kernel = cl::Kernel(program, func_entry_name);
 }
 
 //-----------------------------------------------------------------------------
 // Detect and select a platform as host in OpenCL
 //-----------------------------------------------------------------------------
+
 void pickPlarform(Platform& platform, const vector<Platform>& platforms) {
 
 	if (platforms.size() == 1) platform = platforms[0];
@@ -112,6 +122,7 @@ void pickPlarform(Platform& platform, const vector<Platform>& platforms) {
 //-----------------------------------------------------------------------------
 // Detect and select a device for host in OpenCL
 //-----------------------------------------------------------------------------
+
 void pickDevice(Device& device, const vector<Device>& devices) {
 
 	if (devices.size() == 1) device = devices[0];

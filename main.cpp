@@ -9,17 +9,13 @@ GLFWwindow* gWindow = NULL;
 const unsigned int cnt_obj = 1000; // specify particles number
 
 /** OpenCL Global */
+cl::Kernel kernels[3];
+CLInfo clInfo;
 cl_int err;
-cl::CommandQueue queue;
-cl::Device device;
-cl::Kernel kernel;
-cl::Context context;
-cl::Program program;
 
 Particle cpuParticle[cnt_obj];
-cl::Buffer clParticleIn;
-cl::Buffer clParticleOut;
-std::vector<cl::Memory> clTasks;
+cl::Buffer clParticle;
+//std::vector<cl::Memory> clTasks;
 
 // Camera
 Camera camera(glm::vec3(0.0f, 0.0f, 5.0f));
@@ -42,7 +38,8 @@ int main() {
 
 	// Init OpenCL
 	glFinish();
-	initOpenCL(queue, device, context, program, "Particle.cl");
+	//initOpenCL(queue, device, context, program, "Particle.cl");
+	initOpenCL(clInfo.device, clInfo.context, clInfo.queue);
 
 	// Init Particle
 	for (int i=0; i < cnt_obj; i++) {
@@ -57,14 +54,16 @@ int main() {
 	}
 
 	// Create buffer for GPU
-	clParticleIn  = cl::Buffer(context, CL_MEM_READ_ONLY, cnt_obj * sizeof(Particle));
-	clParticleOut = cl::Buffer(context, CL_MEM_WRITE_ONLY, cnt_obj * sizeof(Particle));
+	clParticle = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(Particle));
 
 	// Write host data to GPU buffer for init
-	queue.enqueueWriteBuffer(clParticleIn, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+	//queue.enqueueWriteBuffer(clParticleIn, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
 
 	// Specify OpenCL kernel arguments (args[0] here is entry function name of GPU)
-	initKernel("kernel_main");
+	//initKernel("kernel_main");
+	buildKernel(clInfo, "ExternelForce.cl", "kernel_main", kernels[0]);
+	buildKernel(clInfo, "FindNeighbor.cl", "kernel_main", kernels[1]);
+	buildKernel(clInfo, "Particle.cl", "kernel_main", kernels[2]);
 
 
 
@@ -119,9 +118,7 @@ int main() {
 
 
 
-	//
-	//glm::mat4 modelMatrices[cnt_obj];
-	//glm::vec4 speedColors[cnt_obj];
+	// Instancing
 	ParticleInst particleInst[cnt_obj];
 
 	unsigned int ibo;
@@ -157,11 +154,6 @@ int main() {
 
 
 
-	// Camera global
-	float width_height_ratio = (float)gWindowWidth / (float)gWindowHeight;
-
-
-
 	// Rendering loop
 	while (!glfwWindowShouldClose(gWindow)) {
 
@@ -176,12 +168,23 @@ int main() {
 
 
 
+		// apply external force
+		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+		kernels[0].setArg(0, clParticle);
+		runKernel(kernels[0], clInfo);
+		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+
 		//
-		queue.enqueueWriteBuffer(clParticleIn, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
-		kernel.setArg(0, clParticleIn);
-		kernel.setArg(1, clParticleOut);
-		runKernel();
-		queue.enqueueReadBuffer(clParticleOut, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+		kernels[1].setArg(0, clParticle);
+		runKernel(kernels[1], clInfo);
+		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+
+		//
+		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+		kernels[2].setArg(0, clParticle);
+		runKernel(kernels[2], clInfo);
+		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
 
 
 
@@ -196,7 +199,7 @@ int main() {
 			float rz = cpuParticle[i].position.z;
 
 			matrix = glm::translate(matrix, glm::vec3(rx, ry, rz));
-			matrix = glm::scale(matrix, glm::vec3(0.01f));
+			matrix = glm::scale(matrix, glm::vec3(0.05f));
 
 			particleInst[i].matrix = matrix;
 
@@ -204,18 +207,16 @@ int main() {
 
 			float speed = glm::length(cpuParticle[i].velocity);
 			speed = 1.0f - std::exp(-speed);
-			//speed = (speed > 1.0f) ? 1.0f : speed;
 			particleInst[i].color = glm::vec4(speed, speed, 1.0f, 1.0);
 		}
 
-		//glBufferData(GL_ARRAY_BUFFER, cnt_obj * sizeof(glm::vec4), &speedColors[0], GL_STATIC_DRAW);
-		//glBufferData(GL_ARRAY_BUFFER, cnt_obj * sizeof(glm::mat4), &modelMatrices[0], GL_STATIC_DRAW);
 		glBufferData(GL_ARRAY_BUFFER, cnt_obj * sizeof(ParticleInst), &particleInst[0], GL_STATIC_DRAW);
 
 
 
 		// Camera transformations
 		glm::mat4 view = camera.getViewMatrix();
+		float width_height_ratio = (float)gWindowWidth / (float)gWindowHeight;
 		glm::mat4 projection = glm::perspective(glm::radians(camera.fov), width_height_ratio, 0.1f, 1000.0f);
 
 		objectShader.use();
@@ -264,6 +265,29 @@ int main() {
 
 	return 0;
 }
+
+
+
+//-----------------------------------------------------------------------------
+// execute kernel
+//-----------------------------------------------------------------------------
+
+void runKernel(cl::Kernel & kernel, CLInfo & clInfo) {
+
+	// Every pixel in the image has its own thread or "work item",
+	// so #work_items == #pixel
+	std::size_t global_work_size = cnt_obj;
+	std::size_t local_work_size = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(clInfo.device);
+	// Ensure the global work size is a multiple of local work size
+	if (global_work_size % local_work_size != 0)
+		global_work_size = (global_work_size / local_work_size + 1) * local_work_size;
+
+	glFinish();
+	clInfo.queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_work_size, local_work_size);
+	clInfo.queue.finish();
+}
+
+
 
 //-----------------------------------------------------------------------------
 // Initialize GLFW and OpenGL
@@ -444,41 +468,4 @@ void showFPS(GLFWwindow* window)
 	}
 
 	frameCount++;
-}
-
-
-
-//-----------------------------------------------------------------------------
-// OpenCL
-//-----------------------------------------------------------------------------
-
-void initKernel(const char* kernel_func_name) {
-
-	// Create a kernel (entry point to a device in OpenCL)
-	kernel = cl::Kernel(program, kernel_func_name);
-
-	kernel.setArg(0, clParticleIn);
-	kernel.setArg(1, clParticleOut);
-}
-
-void runKernel() {
-
-	// Every pixel in the image has its own thread or "work item",
-	// so #work_items == #pixel
-	std::size_t global_work_size = cnt_obj;
-	std::size_t local_work_size = kernel.getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(device);
-	// Ensure the global work size is a multiple of local work size
-	if (global_work_size % local_work_size != 0)
-		global_work_size = (global_work_size / local_work_size + 1) * local_work_size;
-
-	//// Make sure OpenGL is done using VBOs
-	glFinish();
-	//queue.enqueueAcquireGLObjects(&cl_vbos);
-	//queue.finish();
-	//// Launch the kernel
-	queue.enqueueNDRangeKernel(kernel, cl::NullRange, global_work_size, local_work_size);
-	queue.finish();
-	//// Release VBOs so OpenGL can use them
-	//queue.enqueueReleaseGLObjects(&cl_vbos);
-	//queue.finish();
 }

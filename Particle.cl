@@ -4,6 +4,7 @@ typedef struct __Particle_t
 {
 	float3 position;
 	float3 velocity;
+	float3 predicted_pos;
 } Particle_t;
 
 //////////////////////////////////////////////////
@@ -33,24 +34,25 @@ __constant float3 bound_normals[6] = {
 float3 reflect(float3 incidence, float3 normal);
 
 int hitting_face(float3 vec);
+
 void bounding(Particle_t* particle);
 
-__kernel void kernel_main(__constant Particle_t* particleIn, __global Particle_t* particleOut);
+__kernel void kernel_main(__global Particle_t* particles);
 
 //////////////////////////////////////////////////
 
-__kernel void kernel_main(__constant Particle_t* particleIn, __global Particle_t* particleOut)
+__kernel void kernel_main(__global Particle_t* particles)
 {
 	unsigned int index = get_global_id(0);
 
-	Particle_t particle = particleIn[index];
+	Particle_t particle = particles[index];
 
-	particle.velocity.y += -0.5f * gravity_accer * delta_time * delta_time * 100.0f;
+	//particle.velocity.y -= 0.1f;
 
 	bounding(&particle);
 
-	particleOut[index].position = particle.position + delta_time * particle.velocity;
-	particleOut[index].velocity = particle.velocity;
+	particles[index].position = particle.position + delta_time * particle.velocity;
+	particles[index].velocity = particle.velocity;
 }
 
 // generate a reflect vector based on incident and normal vectors
@@ -59,6 +61,7 @@ float3 reflect(float3 incidence, float3 normal)
 	return incidence + normal * -2.0f * dot(incidence, normal);
 }
 
+// determine which face particle hits, return -1 if misses
 int hitting_face(float3 vec)
 {
 	int face = -1; // which face vector hits
@@ -92,7 +95,7 @@ void bounding(Particle_t* particle)
 	float3 velocity = particle->velocity;
 
 	// detect bounding by predicted position
-	int face = hitting_face(position + velocity * delta_time);
+	int face = hitting_face(particle->predicted_pos);
 
 	if (face != -1)
 	{

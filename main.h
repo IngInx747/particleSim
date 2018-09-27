@@ -27,20 +27,24 @@
 /** Model Wrapper */
 #include <Model.h>
 
-// Particle
+//////////////////// Particle ////////////////////
+
+// particle OpenCL IO
 struct Particle
 {
 	glm::vec3 position;
 	glm::vec3 velocity;
+	glm::vec3 predicted_pos;
 } __attribute__ ((aligned (16)));
 
+// for instancing in OpenGL
 struct ParticleInst
 {
 	glm::vec4 color;
 	glm::mat4 matrix;
 };
 
-// Function prototypes
+// OpenGL
 void processInput(GLFWwindow* window);
 void mouseCallback(GLFWwindow* window, double xpos, double ypos);
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
@@ -48,5 +52,6 @@ void glfw_onFramebufferSize(GLFWwindow* window, int width, int height);
 void showFPS(GLFWwindow* window);
 bool initOpenGL();
 
-void initKernel(const char* kernel_func_name);
-void runKernel();
+// OpenCL
+//void initKernel(cl::Kernel & kernel, cl::Program & program, const char* kernel_func_name);
+void runKernel(cl::Kernel & kernel, CLInfo & clInfo);
