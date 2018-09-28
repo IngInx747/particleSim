@@ -29,12 +29,9 @@ __kernel void kernel_main(__global Particle_t* particles)
 {
 	unsigned int index = get_global_id(0);
 
-	float3 position = particles[index].position;
-	float3 velocity = particles[index].velocity;
-
 	// perform external force on particle
 	particles[index].velocity.y += -gravity_accer * delta_time * 1.0f;
 
-	//
-	particles[index].predicted_pos = position + velocity * delta_time;
+	// predict position only affected by external forces
+	particles[index].predicted_pos = particles[index].position + particles[index].velocity * delta_time;
 }

@@ -9,12 +9,13 @@ GLFWwindow* gWindow = NULL;
 const unsigned int cnt_obj = 1000; // specify particles number
 
 /** OpenCL Global */
-cl::Kernel kernels[3];
+cl::Kernel kernels[4];
 CLInfo clInfo;
 cl_int err;
 
-Particle cpuParticle[cnt_obj];
-cl::Buffer clParticle;
+Particle cpuParticles[cnt_obj];
+cl::Buffer clParticles;
+cl::Buffer clLambdas;
 //std::vector<cl::Memory> clTasks;
 
 // Camera
@@ -38,32 +39,20 @@ int main() {
 
 	// Init OpenCL
 	glFinish();
-	//initOpenCL(queue, device, context, program, "Particle.cl");
 	initOpenCL(clInfo.device, clInfo.context, clInfo.queue);
 
-	// Init Particle
-	for (int i=0; i < cnt_obj; i++) {
-		float px = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		float pz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		float py = 0.0f;
-		float vx = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		float vz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		float vy = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		cpuParticle[i].position = glm::vec3(px, py, pz);
-		cpuParticle[i].velocity = glm::vec3(vx, vy, vz);
-	}
-
 	// Create buffer for GPU
-	clParticle = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(Particle));
+	clParticles = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(Particle));
+	clLambdas = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(float));
 
 	// Write host data to GPU buffer for init
-	//queue.enqueueWriteBuffer(clParticleIn, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+	// no need here
 
 	// Specify OpenCL kernel arguments (args[0] here is entry function name of GPU)
-	//initKernel("kernel_main");
 	buildKernel(clInfo, "ExternelForce.cl", "kernel_main", kernels[0]);
-	buildKernel(clInfo, "FindNeighbor.cl", "kernel_main", kernels[1]);
-	buildKernel(clInfo, "Particle.cl", "kernel_main", kernels[2]);
+	buildKernel(clInfo, "InternelForce.cl", "kernel_calc_lambda", kernels[1]);
+	buildKernel(clInfo, "InternelForce.cl", "kernel_calc_disp", kernels[2]);
+	buildKernel(clInfo, "Particle.cl", "kernel_main", kernels[3]);
 
 
 
@@ -154,6 +143,26 @@ int main() {
 
 
 
+	// Init Particle
+	for (int i = 0; i < cnt_obj; i++) {
+		//float px = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
+		//float py = 0.0f;
+		//float pz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
+		//float vx = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
+		//float vy = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
+		//float vz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
+		float px = -0.5f + 0.1f * (i % 10);
+		float py = -0.5f + 0.1f * ((i / 10) % 10);
+		float pz = -0.5f + 0.1f * ((i / 100) % 10);
+		float vx = 0.0f;
+		float vy = 0.0f;
+		float vz = 0.0f;
+		cpuParticles[i].position = glm::vec3(px, py, pz);
+		cpuParticles[i].velocity = glm::vec3(vx, vy, vz);
+	}
+
+
+
 	// Rendering loop
 	while (!glfwWindowShouldClose(gWindow)) {
 
@@ -168,23 +177,28 @@ int main() {
 
 
 
+		//
+		clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
+
 		// apply external force
-		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
-		kernels[0].setArg(0, clParticle);
+		kernels[0].setArg(0, clParticles);
 		runKernel(kernels[0], clInfo);
-		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
 
 		//
-		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
-		kernels[1].setArg(0, clParticle);
+		kernels[1].setArg(0, clParticles);
+		kernels[1].setArg(1, clLambdas);
 		runKernel(kernels[1], clInfo);
-		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
 
 		//
-		clInfo.queue.enqueueWriteBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
-		kernels[2].setArg(0, clParticle);
+		kernels[2].setArg(0, clParticles);
+		kernels[2].setArg(1, clLambdas);
 		runKernel(kernels[2], clInfo);
-		clInfo.queue.enqueueReadBuffer(clParticle, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticle);
+
+		//
+		kernels[3].setArg(0, clParticles);
+		runKernel(kernels[3], clInfo);
+
+		clInfo.queue.enqueueReadBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
 
 
 
@@ -194,18 +208,18 @@ int main() {
 
 			glm::mat4 matrix;
 
-			float rx = cpuParticle[i].position.x;
-			float ry = cpuParticle[i].position.y;
-			float rz = cpuParticle[i].position.z;
+			float rx = cpuParticles[i].position.x;
+			float ry = cpuParticles[i].position.y;
+			float rz = cpuParticles[i].position.z;
 
 			matrix = glm::translate(matrix, glm::vec3(rx, ry, rz));
-			matrix = glm::scale(matrix, glm::vec3(0.05f));
+			matrix = glm::scale(matrix, glm::vec3(0.02f));
 
 			particleInst[i].matrix = matrix;
 
 			// speed discriminator
 
-			float speed = glm::length(cpuParticle[i].velocity);
+			float speed = glm::length(cpuParticles[i].velocity);
 			speed = 1.0f - std::exp(-speed);
 			particleInst[i].color = glm::vec4(speed, speed, 1.0f, 1.0);
 		}

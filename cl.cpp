@@ -74,10 +74,10 @@ void initOpenCL(
 }
 
 //-----------------------------------------------------------------------------
-// Compile program & Add program to kernel
+// Compile program
 //-----------------------------------------------------------------------------
 
-void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_entry_name, Kernel & kernel)
+void buildProgram(CLInfo & clInfo, const char* source_filename, Program & program)
 {
 	// Convert the OpenCL source code to a string
 	ifstream source_file(source_filename, std::ios::in);
@@ -86,10 +86,20 @@ void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_
 	const char* kernel_source = source_string.c_str();
 
 	// Create an OpenCL program by performing runtime compilation for the chosen device
-	Program program = Program(clInfo.context, kernel_source);
+	program = Program(clInfo.context, kernel_source);
 	cl_int result = program.build( { clInfo.device } );
 	if (result) cout << "Error during compilation OpenCL code!\n (" << result << ")\n";
 	if (result == CL_BUILD_PROGRAM_FAILURE) { printErrorLog(program, clInfo.device); exit(1); }
+}
+
+//-----------------------------------------------------------------------------
+// Compile program & Add program to kernel
+//-----------------------------------------------------------------------------
+
+void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_entry_name, Kernel & kernel)
+{
+	Program program;
+	buildProgram(clInfo, source_filename, program);
 
 	// Add program to kernel
 	kernel = cl::Kernel(program, func_entry_name);

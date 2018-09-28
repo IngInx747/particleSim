@@ -47,11 +47,12 @@ __kernel void kernel_main(__global Particle_t* particles)
 
 	Particle_t particle = particles[index];
 
-	//particle.velocity.y -= 0.1f;
-
 	bounding(&particle);
+	
+	particle.velocity = (particle.predicted_pos - particle.position) * (1.0f / delta_time);
+	particle.position = particle.predicted_pos;
 
-	particles[index].position = particle.position + delta_time * particle.velocity;
+	particles[index].position = particle.position;
 	particles[index].velocity = particle.velocity;
 }
 
@@ -93,9 +94,10 @@ void bounding(Particle_t* particle)
 {
 	float3 position = particle->position;
 	float3 velocity = particle->velocity;
+	float3 predicted_pos = particle->predicted_pos;
 
 	// detect bounding by predicted position
-	int face = hitting_face(particle->predicted_pos);
+	int face = hitting_face(predicted_pos);
 
 	if (face != -1)
 	{
@@ -105,5 +107,8 @@ void bounding(Particle_t* particle)
 		if (face == 2 || face == 3) mask.y = eff_collide;
 		if (face == 4 || face == 5) mask.z = eff_collide;
 		particle->velocity = mask * reflect(velocity, bound_normals[face]);
+		particle->predicted_pos.x = clamp(predicted_pos.x, -1.0f, 1.0f);
+		particle->predicted_pos.y = clamp(predicted_pos.y, -1.0f, 1.0f);
+		particle->predicted_pos.z = clamp(predicted_pos.z, -1.0f, 1.0f);
 	}
 }

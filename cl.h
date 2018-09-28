@@ -25,7 +25,7 @@ struct CLInfo
 void pickPlarform(cl::Platform& platform, const std::vector<cl::Platform>& platforms);
 void pickDevice(cl::Device& device, const std::vector<cl::Device>& devices);
 void printErrorLog(const cl::Program& program, const cl::Device& device);
-//void buildProgram(Program & program, const char* source_filename);
+void buildProgram(CLInfo & clInfo, const char* source_filename, cl::Program & program);
 void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_entry_name, cl::Kernel & kernel);
 
 void initOpenCL(
