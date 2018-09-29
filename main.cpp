@@ -151,15 +151,17 @@ int main() {
 		//float vx = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
 		//float vy = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
 		//float vz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
-		float px = -0.5f + 0.1f * (i % 10);
-		float py = -0.5f + 0.1f * ((i / 10) % 10);
-		float pz = -0.5f + 0.1f * ((i / 100) % 10);
+		float px = -0.9f + 0.2f * (i % 10);
+		float py = -0.9f + 0.2f * ((i / 10) % 10);
+		float pz = -0.9f + 0.2f * ((i / 100) % 10);
 		float vx = 0.0f;
 		float vy = 0.0f;
 		float vz = 0.0f;
 		cpuParticles[i].position = glm::vec3(px, py, pz);
 		cpuParticles[i].velocity = glm::vec3(vx, vy, vz);
 	}
+
+	clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
 
 
 
@@ -178,7 +180,7 @@ int main() {
 
 
 		//
-		clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
+		//clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
 
 		// apply external force
 		kernels[0].setArg(0, clParticles);

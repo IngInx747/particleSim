@@ -19,6 +19,9 @@ __constant float delta_time = 0.01f;
 // constant physics
 __constant float gravity_accer = 9.8f;
 
+// constant particle
+__constant float mass = 1.0f;
+
 //////////////////////////////////////////////////
 
 __kernel void kernel_main(__global Particle_t* particles);
@@ -30,7 +33,7 @@ __kernel void kernel_main(__global Particle_t* particles)
 	unsigned int index = get_global_id(0);
 
 	// perform external force on particle
-	particles[index].velocity.y += -gravity_accer * delta_time * 1.0f;
+	particles[index].velocity.y += -gravity_accer * delta_time * mass;
 
 	// predict position only affected by external forces
 	particles[index].predicted_pos = particles[index].position + particles[index].velocity * delta_time;

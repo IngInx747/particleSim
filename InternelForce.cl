@@ -16,10 +16,15 @@ __constant float kPi = 3.14159265;
 
 // constant control
 __constant float delta_time = 0.01f;
-__constant float grid_div = 0.3f; // [0.2 ~ 0.4]
+__constant float grid_div = 0.2f; // [0.2 ~ 0.4]
 
 // constant physics
 __constant float gravity_accer = 9.8f;
+__constant float density_water = 1.0f;
+
+// constant particle
+__constant float mass = 1.0f;
+__constant float cutoff = 0.2f;
 
 //////////////////////////////////////////////////
 
@@ -52,11 +57,11 @@ __kernel void kernel_calc_disp(__global Particle_t* particles, __constant float*
 		if (neighboring(particle.predicted_pos, particles[i].predicted_pos, grid_div))
 		{
 			float3 position = particle.predicted_pos - particles[i].predicted_pos;
-			displacement += w_grad_spiky(position, grid_div) * (lambda + lambdas[i]);
+			displacement += w_grad_spiky(position, cutoff) * (lambda + lambdas[i]);
 		}
 	}
 
-	particles[index].predicted_pos += displacement * 0.00001f;
+	particles[index].predicted_pos += displacement / density_water;
 }
 
 __kernel void kernel_calc_lambda(__constant Particle_t* particles, __global float* lambdas)
@@ -67,22 +72,22 @@ __kernel void kernel_calc_lambda(__constant Particle_t* particles, __global floa
 	Particle_t particle = particles[index];
 
 	float numerator = 0.0f;
-	float denominator = kEpsilon;
-	float ct = -0.0364583f / grid_div;
+	float denominator = 1.0f * kEpsilon;
+	float ct = -0.00243f * kPi * density_water * pow(cutoff, 5);
 
 	for (unsigned int i = 0; i < total; i++)
 	{
 		if (neighboring(particle.predicted_pos, particles[i].predicted_pos, grid_div))
 		{
 			float radius = length(particle.predicted_pos - particles[i].predicted_pos);
-			if (radius > grid_div) continue;
-			float ratio = radius / grid_div;
-			numerator += pow(1.0f - ratio * ratio, 3);
+			if (radius > cutoff) continue;
+			float ratio = radius / cutoff;
+			numerator += mass * pow(1.0f - ratio * ratio, 3);
 			denominator += pow(1.0f - ratio, 4);
 		}
 	}
 
-	lambdas[index] = ct * numerator / denominator;
+	lambdas[index] = ct * (numerator - density_water) / denominator;
 }
 
 // detect if two particles is neighboring
