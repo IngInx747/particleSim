@@ -20,4 +20,4 @@ Please run it under project directory.
 
 ## Demo
 
-![Alt text](Resources/demo.mp4?raw=true "Position Based Fluids")
+![Alt text](Resources/demo.gif?raw=true "Position Based Fluids")
