@@ -44,7 +44,7 @@ __constant float cutoff = 0.21f;
 __constant float bb_sizes[6] = {
 	 BB_SCALE, // right
 	-BB_SCALE, // left
-	 1.0f, // top
+	 20.0f, // top
 	-1.0f, // buttom
 	 BB_SCALE, // front
 	-BB_SCALE, // back

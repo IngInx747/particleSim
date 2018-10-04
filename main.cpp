@@ -6,7 +6,7 @@ const int gWindowWidth = 1280;
 const int gWindowHeight = 720;
 GLFWwindow* gWindow = NULL;
 
-const unsigned int cnt_obj = 1000; // specify particles number
+const unsigned int cnt_obj = 1200; // particles number (<= 1365)
 const unsigned int cnt_cell = 1000;
 
 /** OpenCL Global */
@@ -166,8 +166,8 @@ int main() {
 		//float vy = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
 		//float vz = (rand() / (float) RAND_MAX) * 2.0f - 1.0f;
 		float px = -0.9f + 0.2f * (i % 10);
-		float py = -0.9f + 0.2f * ((i / 10) % 10);
-		float pz = -0.9f + 0.2f * ((i / 100) % 10);
+		float py = -0.9f + 0.2f * (i / 100);
+		float pz = -0.9f + 0.2f * ((i / 10) % 10);
 		float vx = 0.0f;
 		float vy = 0.0f;
 		float vz = 0.0f;
@@ -216,7 +216,7 @@ int main() {
 		int cnt_particle = 0;
 		for (auto iter = cell_particle_table.begin(); iter != cell_particle_table.end(); iter++)
 		{
-			//std::cout<<iter->first<<" "<<" "<<"\n";
+			//std::cout<<iter->first<<" "<<cnt_particle<<" "<<iter->second.size()<<"\n";
 			cpuLookup[iter->first].offset = cnt_particle;
 			cpuLookup[iter->first].size = iter->second.size(); // number of particles in current cell
 
@@ -337,7 +337,7 @@ int main() {
 			glDrawElementsInstanced(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0, cnt_obj);
 			glBindVertexArray(0);
 		}
-		
+
 
 
 		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
