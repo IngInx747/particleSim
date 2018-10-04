@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <map>
 
 /** Basic GLFW header */
 #include <glad/glad.h> // Important - this header must come before glfw3 header
@@ -36,6 +37,13 @@ struct Particle
 	glm::vec3 velocity;
 	glm::vec3 predicted_pos;
 } __attribute__ ((aligned (16)));
+
+// for rapid mapping cell IDs table to particles table
+struct CellLookupTable
+{
+	int offset;
+	int size;
+};
 
 // for instancing in OpenGL
 struct ParticleInst

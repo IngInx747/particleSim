@@ -7,15 +7,25 @@ const int gWindowHeight = 720;
 GLFWwindow* gWindow = NULL;
 
 const unsigned int cnt_obj = 1000; // specify particles number
+const unsigned int cnt_cell = 1000;
 
 /** OpenCL Global */
-cl::Kernel kernels[4];
+cl::Program program;
+cl::Kernel kernels[6];
 CLInfo clInfo;
 cl_int err;
 
 Particle cpuParticles[cnt_obj];
 cl::Buffer clParticles;
+
+int cpuIndices[cnt_obj];
+cl::Buffer clIndices;
+
+CellLookupTable cpuLookup[cnt_cell];
+cl::Buffer clLookup;
+
 cl::Buffer clLambdas;
+
 //std::vector<cl::Memory> clTasks;
 
 // Camera
@@ -43,16 +53,20 @@ int main() {
 
 	// Create buffer for GPU
 	clParticles = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(Particle));
+	clIndices = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(int));
+	clLookup = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_cell * sizeof(CellLookupTable));
 	clLambdas = cl::Buffer(clInfo.context, CL_MEM_READ_WRITE, cnt_obj * sizeof(float));
 
-	// Write host data to GPU buffer for init
-	// no need here
+	// Create program for kernels
+	buildProgram(clInfo, "Particle.cl", program);
 
 	// Specify OpenCL kernel arguments (args[0] here is entry function name of GPU)
-	buildKernel(clInfo, "ExternelForce.cl", "kernel_main", kernels[0]);
-	buildKernel(clInfo, "InternelForce.cl", "kernel_calc_lambda", kernels[1]);
-	buildKernel(clInfo, "InternelForce.cl", "kernel_calc_disp", kernels[2]);
-	buildKernel(clInfo, "Particle.cl", "kernel_main", kernels[3]);
+	buildKernel(clInfo, program, "kernel_externel_force", kernels[0]);
+	buildKernel(clInfo, program, "kernel_find_cell", kernels[1]);
+	buildKernel(clInfo, program, "kernel_calc_lambda", kernels[2]);
+	buildKernel(clInfo, program, "kernel_calc_disp", kernels[3]);
+	buildKernel(clInfo, program, "kernel_update", kernels[4]);
+	buildKernel(clInfo, program, "kernel_viscosity", kernels[5]);
 
 
 
@@ -73,7 +87,7 @@ int main() {
 		glm::vec3( 0.0f,  0.0f, -3.0f),
 		glm::vec3( 0.0f,  0.0f,  3.0f)
 	};
-	glm::vec3 directionalLightDirection(1.0f, -1.0f, 0.0f);
+	glm::vec3 directionalLightDirection(0.0f, 0.0f, -1.0f);
 
 	// Object shader config
 	objectShader.use();
@@ -93,7 +107,7 @@ int main() {
 
 	instanceShader.use();
 	instanceShader.setUniform("uDirectionalLight.direction", directionalLightDirection);
-	instanceShader.setUniform("uDirectionalLight.ambient", 0.5f, 0.5f, 0.5f);
+	instanceShader.setUniform("uDirectionalLight.ambient", 0.0f, 0.0f, 0.0f);
 	instanceShader.setUniform("uDirectionalLight.diffuse", 1.0f, 1.0f, 1.0f);
 	instanceShader.setUniform("uDirectionalLight.specular", 1.0f, 1.0f, 1.0f);
 	instanceShader.setUniform("uSpotLight.innerCutOff", glm::cos(glm::radians(12.5f)));
@@ -179,26 +193,80 @@ int main() {
 
 
 
-		//
-		//clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
+		////////// Fluid calculation //////////
 
 		// apply external force
 		kernels[0].setArg(0, clParticles);
 		runKernel(kernels[0], clInfo);
 
-		//
+		// find particles' neighbors
 		kernels[1].setArg(0, clParticles);
-		kernels[1].setArg(1, clLambdas);
+		kernels[1].setArg(1, clIndices);
 		runKernel(kernels[1], clInfo);
 
-		//
-		kernels[2].setArg(0, clParticles);
-		kernels[2].setArg(1, clLambdas);
-		runKernel(kernels[2], clInfo);
+		clInfo.queue.enqueueReadBuffer(clIndices, CL_TRUE, 0, cnt_obj * sizeof(int), cpuIndices);
 
-		//
-		kernels[3].setArg(0, clParticles);
-		runKernel(kernels[3], clInfo);
+		std::map<int, std::vector<int> > cell_particle_table; // not radix-sorting yet
+		for (int i = 0; i < cnt_obj; i++)
+		{
+			//std::cout<<i<<" "<<cpuIndices[i]<<"\n";
+			cell_particle_table[cpuIndices[i]].push_back(i);
+		}
+
+		int cnt_particle = 0;
+		for (auto iter = cell_particle_table.begin(); iter != cell_particle_table.end(); iter++)
+		{
+			//std::cout<<iter->first<<" "<<" "<<"\n";
+			cpuLookup[iter->first].offset = cnt_particle;
+			cpuLookup[iter->first].size = iter->second.size(); // number of particles in current cell
+
+			for (int p_id : iter->second)
+			{
+				cpuIndices[cnt_particle++] = p_id; // particle ID
+			}
+		}
+
+		//for (int i=0; i<cnt_cell; i++)
+		//{
+		//	if (cpuLookup[i].size == 0) continue;
+		//	std::cout<<i<<" "<<cpuLookup[i].offset<<" "<<cpuLookup[i].size<<" : ";
+		//	for (int j=0; j<cpuLookup[i].size; j++)
+		//	{
+		//		std::cout<<cpuIndices[cpuLookup[i].offset + j]<<" ";
+		//	} std::cout<<"\n";
+		//}
+
+		clInfo.queue.enqueueWriteBuffer(clIndices, CL_TRUE, 0, cnt_obj * sizeof(int), cpuIndices);
+		clInfo.queue.enqueueWriteBuffer(clLookup, CL_TRUE, 0, cnt_cell * sizeof(CellLookupTable), cpuLookup);
+
+		// solve constrain equation
+		unsigned int num_iteration = 10;
+		for (int i = 0; i < num_iteration; ++i)
+		{
+			// calculate lambda
+			kernels[2].setArg(0, clParticles);
+			kernels[2].setArg(1, clLookup);
+			kernels[2].setArg(2, clIndices);
+			kernels[2].setArg(3, clLambdas);
+			runKernel(kernels[2], clInfo);
+
+			// calculate displacement
+			kernels[3].setArg(0, clParticles);
+			kernels[3].setArg(1, clLookup);
+			kernels[3].setArg(2, clIndices);
+			kernels[3].setArg(3, clLambdas);
+			runKernel(kernels[3], clInfo);
+		}
+
+		// update particle
+		kernels[4].setArg(0, clParticles);
+		runKernel(kernels[4], clInfo);
+
+		// confining fluid
+		//kernels[5].setArg(0, clParticles);
+		//kernels[5].setArg(1, clLookup);
+		//kernels[5].setArg(2, clIndices);
+		//runKernel(kernels[5], clInfo);
 
 		clInfo.queue.enqueueReadBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
 
@@ -223,7 +291,7 @@ int main() {
 
 			float speed = glm::length(cpuParticles[i].velocity);
 			speed = 1.0f - std::exp(-speed);
-			particleInst[i].color = glm::vec4(speed, speed, 1.0f, 1.0);
+			particleInst[i].color = glm::vec4(speed, speed, 1.0f, 1.0f);
 		}
 
 		glBufferData(GL_ARRAY_BUFFER, cnt_obj * sizeof(ParticleInst), &particleInst[0], GL_STATIC_DRAW);

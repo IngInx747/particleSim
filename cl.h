@@ -27,6 +27,7 @@ void pickDevice(cl::Device& device, const std::vector<cl::Device>& devices);
 void printErrorLog(const cl::Program& program, const cl::Device& device);
 void buildProgram(CLInfo & clInfo, const char* source_filename, cl::Program & program);
 void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_entry_name, cl::Kernel & kernel);
+void buildKernel(CLInfo & clInfo, cl::Program & program, const char* func_entry_name, cl::Kernel & kernel);
 
 void initOpenCL(
 	cl::Device & device,

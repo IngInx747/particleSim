@@ -105,6 +105,11 @@ void buildKernel(CLInfo & clInfo, const char* source_filename, const char* func_
 	kernel = cl::Kernel(program, func_entry_name);
 }
 
+void buildKernel(CLInfo & clInfo, Program & program, const char* func_entry_name, Kernel & kernel)
+{
+	kernel = cl::Kernel(program, func_entry_name);
+}
+
 //-----------------------------------------------------------------------------
 // Detect and select a platform as host in OpenCL
 //-----------------------------------------------------------------------------
