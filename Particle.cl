@@ -44,7 +44,7 @@ __constant float cutoff = 0.21f;
 __constant float bb_sizes[6] = {
 	 BB_SCALE, // right
 	-BB_SCALE, // left
-	 20.0f, // top
+	 5.0f, // top
 	-1.0f, // buttom
 	 BB_SCALE, // front
 	-BB_SCALE, // back
@@ -68,18 +68,34 @@ __constant int grid_dim[3] = {10, 10, 10};
 __constant int grid_size = 1000;
 
 __constant int3 grid_neighbors[27] = {
-	((int3) {-1, -1, -1}), ((int3) { 0, -1, -1}), ((int3) { 1, -1, -1}),
-	((int3) {-1,  0, -1}), ((int3) { 0,  0, -1}), ((int3) { 1,  0, -1}),
-	((int3) {-1,  1, -1}), ((int3) { 0,  1, -1}), ((int3) { 1,  1, -1}),
-	((int3) {-1, -1,  0}), ((int3) { 0, -1,  0}), ((int3) { 1, -1,  0}),
-	((int3) {-1,  0,  0}), ((int3) { 0,  0,  0}), ((int3) { 1,  0,  0}),
-	((int3) {-1,  1,  0}), ((int3) { 0,  1,  0}), ((int3) { 1,  1,  0}),
-	((int3) {-1, -1,  1}), ((int3) { 0, -1,  1}), ((int3) { 1, -1,  1}),
-	((int3) {-1,  0,  1}), ((int3) { 0,  0,  1}), ((int3) { 1,  0,  1}),
-	((int3) {-1,  1,  1}), ((int3) { 0,  1,  1}), ((int3) { 1,  1,  1}),
+	// body center
+	((int3) { 0,  0,  0}),
+	// face centers
+	((int3) {-1,  0,  0}), ((int3) { 1,  0,  0}),
+	((int3) { 0, -1,  0}), ((int3) { 0,  1,  0}),
+	((int3) { 0,  0, -1}), ((int3) { 0,  0,  1}),
+	// edge centers
+	((int3) { 0, -1, -1}), ((int3) { 0,  1, -1}), ((int3) { 0,  1,  1}), ((int3) { 0, -1,  1}),
+	((int3) {-1,  0, -1}), ((int3) { 1,  0, -1}), ((int3) { 1,  0,  1}), ((int3) {-1,  0,  1}),
+	((int3) {-1, -1,  0}), ((int3) { 1, -1,  0}), ((int3) { 1,  1,  0}), ((int3) {-1,  1,  0}),
+	// corners
+	((int3) {-1, -1, -1}), ((int3) { 1, -1, -1}),
+	((int3) {-1,  1, -1}), ((int3) { 1,  1, -1}),
+	((int3) {-1, -1,  1}), ((int3) { 1, -1,  1}),
+	((int3) {-1,  1,  1}), ((int3) { 1,  1,  1}),
+
+	//((int3) {-1, -1, -1}), ((int3) { 0, -1, -1}), ((int3) { 1, -1, -1}),
+	//((int3) {-1,  0, -1}), ((int3) { 0,  0, -1}), ((int3) { 1,  0, -1}),
+	//((int3) {-1,  1, -1}), ((int3) { 0,  1, -1}), ((int3) { 1,  1, -1}),
+	//((int3) {-1, -1,  0}), ((int3) { 0, -1,  0}), ((int3) { 1, -1,  0}),
+	//((int3) {-1,  0,  0}), ((int3) { 0,  0,  0}), ((int3) { 1,  0,  0}),
+	//((int3) {-1,  1,  0}), ((int3) { 0,  1,  0}), ((int3) { 1,  1,  0}),
+	//((int3) {-1, -1,  1}), ((int3) { 0, -1,  1}), ((int3) { 1, -1,  1}),
+	//((int3) {-1,  0,  1}), ((int3) { 0,  0,  1}), ((int3) { 1,  0,  1}),
+	//((int3) {-1,  1,  1}), ((int3) { 0,  1,  1}), ((int3) { 1,  1,  1}),
 };
 
-#define MAX_NEIGHBORS 1000
+#define MAX_NEIGHBORS 500
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -174,21 +190,58 @@ __kernel void kernel_calc_lambda(
 	float ct = -0.00243f * kPi * density_water * pow(cutoff, 5);
 	float3 self_grad = ((float3) {0.0f, 0.0f, 0.0f});
 
-	int neighboring_particles[MAX_NEIGHBORS];
-	int num_ptc = get_neighboring_particles(&neighboring_particles[0], particle.position, cell_lookup, cell_ptc_table);
+	//for (unsigned int i = 0; i < total; i++)
+	//{
+	//	if (neighboring(particle.position, particles[i].position))
+	//	{
+	//		float3 position = particle.predicted_pos - particles[i].predicted_pos;
+	//		float radius = length(position);
+	//		if (radius > cutoff) continue;
+	//		float ratio = radius / cutoff;
+	//		numerator += mass * pow(1.0f - ratio * ratio, 3);
+	//		float inter_grad_scale = pow(1.0f - ratio, 4);
+	//		denominator += inter_grad_scale;
+	//		self_grad += inter_grad_scale * normalize(position);
+	//	}
+	//}
 
-	for (int i = 0; i < num_ptc; i++)
+	int cell_id = celling(particle.position);
+	int3 cell = cell_1to3(cell_id);
+	for (int i = 0; i < 27; i++)
 	{
-		int ptc_id = neighboring_particles[i];
-		float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
-		float radius = length(position);
-		if (radius > cutoff) continue;
-		float ratio = radius / cutoff;
-		numerator += mass * pow(1.0f - ratio * ratio, 3);
-		float inter_grad_scale = pow(1.0f - ratio, 4);
-		denominator += inter_grad_scale;
-		self_grad += inter_grad_scale * normalize(position);
+		int3 neighbor_cell = cell + grid_neighbors[i];
+		if (out_of_grid(neighbor_cell)) continue;
+		int neighbor_cell_id = cell_3to1(neighbor_cell);
+		int offset = cell_lookup[neighbor_cell_id].offset;
+		int num_ptc = cell_lookup[neighbor_cell_id].size;
+		for (int j = 0; j < num_ptc; j++)
+		{
+			int ptc_id = cell_ptc_table[offset + j];
+			float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
+			float radius = length(position);
+			if (radius > cutoff) continue;
+			float ratio = radius / cutoff;
+			numerator += mass * pow(1.0f - ratio * ratio, 3);
+			float inter_grad_scale = pow(1.0f - ratio, 4);
+			denominator += inter_grad_scale;
+			self_grad += inter_grad_scale * normalize(position);
+		}
 	}
+
+	//int neighboring_particles[MAX_NEIGHBORS];
+	//int num_ptc = get_neighboring_particles(&neighboring_particles[0], particle.position, cell_lookup, cell_ptc_table);
+	//for (int i = 0; i < num_ptc; i++)
+	//{
+	//	int ptc_id = neighboring_particles[i];
+	//	float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
+	//	float radius = length(position);
+	//	if (radius > cutoff) continue;
+	//	float ratio = radius / cutoff;
+	//	numerator += mass * pow(1.0f - ratio * ratio, 3);
+	//	float inter_grad_scale = pow(1.0f - ratio, 4);
+	//	denominator += inter_grad_scale;
+	//	self_grad += inter_grad_scale * normalize(position);
+	//}
 
 	denominator += dot(self_grad, self_grad);
 
@@ -209,18 +262,49 @@ __kernel void kernel_calc_disp(
 
 	float3 displacement = ((float3) {0.0f,  0.0f,  0.0f});
 
-	int neighboring_particles[MAX_NEIGHBORS];
-	int num_ptc = get_neighboring_particles(&neighboring_particles[0], particle.position, cell_lookup, cell_ptc_table);
+	//for (unsigned int i = 0; i < total; i++)
+	//{
+	//	if (neighboring(particle.position, particles[i].position))
+	//	{
+	//		float3 position = particle.predicted_pos - particles[i].predicted_pos;
+	//		float s_corr = 0.0f;
+	//		//s_corr = w_spiky(length(position), cutoff) / w_spiky(0.1f * cutoff, cutoff);
+	//		//s_corr = -0.0001f * pow(s_corr, 4);
+	//		displacement += w_grad_spiky(position, cutoff) * (lambda + lambdas[i] + s_corr);
+	//	}
+	//}
 
-	for (int i = 0; i < num_ptc; i++)
+	int cell_id = celling(particle.position);
+	int3 cell = cell_1to3(cell_id);
+	for (int i = 0; i < 27; i++)
 	{
-		int ptc_id = neighboring_particles[i];
-		float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
-		float s_corr = 0.0f;
-		s_corr = w_spiky(length(position), cutoff) / w_spiky(0, cutoff);
-		s_corr = -0.01f * pow(s_corr, 4);
-		displacement += w_grad_spiky(position, cutoff) * (lambda + lambdas[ptc_id] + s_corr);
+		int3 neighbor_cell = cell + grid_neighbors[i];
+		if (out_of_grid(neighbor_cell)) continue;
+		int neighbor_cell_id = cell_3to1(neighbor_cell);
+		int offset = cell_lookup[neighbor_cell_id].offset;
+		int num_ptc = cell_lookup[neighbor_cell_id].size;
+		for (int j = 0; j < num_ptc; j++)
+		{
+			int ptc_id = cell_ptc_table[offset + j];
+			float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
+			float s_corr = 0.0f;
+			s_corr = w_spiky(length(position), cutoff) / w_spiky(0, cutoff);
+			s_corr = -0.01f * pow(s_corr, 4);
+			displacement += w_grad_spiky(position, cutoff) * (lambda + lambdas[ptc_id] + s_corr);
+		}
 	}
+
+	//int neighboring_particles[MAX_NEIGHBORS];
+	//int num_ptc = get_neighboring_particles(&neighboring_particles[0], particle.position, cell_lookup, cell_ptc_table);
+	//for (int i = 0; i < num_ptc; i++)
+	//{
+	//	int ptc_id = neighboring_particles[i];
+	//	float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
+	//	float s_corr = 0.0f;
+	//	s_corr = w_spiky(length(position), cutoff) / w_spiky(0, cutoff);
+	//	s_corr = -0.01f * pow(s_corr, 4);
+	//	displacement += w_grad_spiky(position, cutoff) * (lambda + lambdas[ptc_id] + s_corr);
+	//}
 
 	particle.predicted_pos += displacement;
 
@@ -269,17 +353,6 @@ __kernel void kernel_viscosity(
 	//		viscosity += 0.01f * w_spiky(length(position), cutoff) * velocity;
 	//	}
 	//}
-	
-	int neighboring_particles[MAX_NEIGHBORS];
-	int num_ptc = get_neighboring_particles(&neighboring_particles[0], particle.position, cell_lookup, cell_ptc_table);
-
-	for (int i = 0; i < num_ptc; i++)
-	{
-		int ptc_id = neighboring_particles[i];
-		float3 position = particle.predicted_pos - particles[ptc_id].predicted_pos;
-		float3 velocity = particle.velocity - particles[ptc_id].velocity;
-		viscosity += 0.01f * w_spiky(length(position), cutoff) * velocity;
-	}
 
 	particles[index].velocity += viscosity;
 }

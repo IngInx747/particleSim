@@ -177,7 +177,27 @@ int main() {
 
 	clInfo.queue.enqueueWriteBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
 
-
+	//
+	kernels[0].setArg(0, clParticles);
+	//
+	kernels[1].setArg(0, clParticles);
+	kernels[1].setArg(1, clIndices);
+	//
+	kernels[2].setArg(0, clParticles);
+	kernels[2].setArg(1, clLookup);
+	kernels[2].setArg(2, clIndices);
+	kernels[2].setArg(3, clLambdas);
+	//
+	kernels[3].setArg(0, clParticles);
+	kernels[3].setArg(1, clLookup);
+	kernels[3].setArg(2, clIndices);
+	kernels[3].setArg(3, clLambdas);
+	//
+	kernels[4].setArg(0, clParticles);
+	//
+	//kernels[5].setArg(0, clParticles);
+	//kernels[5].setArg(1, clLookup);
+	//kernels[5].setArg(2, clIndices);
 
 	// Rendering loop
 	while (!glfwWindowShouldClose(gWindow)) {
@@ -196,12 +216,9 @@ int main() {
 		////////// Fluid calculation //////////
 
 		// apply external force
-		kernels[0].setArg(0, clParticles);
 		runKernel(kernels[0], clInfo);
 
 		// find particles' neighbors
-		kernels[1].setArg(0, clParticles);
-		kernels[1].setArg(1, clIndices);
 		runKernel(kernels[1], clInfo);
 
 		clInfo.queue.enqueueReadBuffer(clIndices, CL_TRUE, 0, cnt_obj * sizeof(int), cpuIndices);
@@ -240,32 +257,20 @@ int main() {
 		clInfo.queue.enqueueWriteBuffer(clLookup, CL_TRUE, 0, cnt_cell * sizeof(CellLookupTable), cpuLookup);
 
 		// solve constrain equation
-		unsigned int num_iteration = 10;
+		unsigned int num_iteration = 5;
 		for (int i = 0; i < num_iteration; ++i)
 		{
 			// calculate lambda
-			kernels[2].setArg(0, clParticles);
-			kernels[2].setArg(1, clLookup);
-			kernels[2].setArg(2, clIndices);
-			kernels[2].setArg(3, clLambdas);
 			runKernel(kernels[2], clInfo);
 
 			// calculate displacement
-			kernels[3].setArg(0, clParticles);
-			kernels[3].setArg(1, clLookup);
-			kernels[3].setArg(2, clIndices);
-			kernels[3].setArg(3, clLambdas);
 			runKernel(kernels[3], clInfo);
 		}
 
 		// update particle
-		kernels[4].setArg(0, clParticles);
 		runKernel(kernels[4], clInfo);
 
 		// confining fluid
-		//kernels[5].setArg(0, clParticles);
-		//kernels[5].setArg(1, clLookup);
-		//kernels[5].setArg(2, clIndices);
 		//runKernel(kernels[5], clInfo);
 
 		clInfo.queue.enqueueReadBuffer(clParticles, CL_TRUE, 0, cnt_obj * sizeof(Particle), cpuParticles);
