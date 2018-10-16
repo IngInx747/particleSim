@@ -40,6 +40,9 @@ void initOpenCL(
 	cout << "\nUsing OpenCL device: \t" << device.getInfo<CL_DEVICE_NAME>() << "\n";
 	cout << "\tMax compute units: " << device.getInfo<CL_DEVICE_MAX_COMPUTE_UNITS>() << "\n";
 	cout << "\tMax work group size: " << device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << "\n";
+	cout << "\tMax global memory size: " << device.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>() / 1024 << " Kb\n";
+	cout << "\tMax local memory size: " << device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>() / 1024 << " Kb\n";
+	cout << "\n";
 
 	// Create an OpenCL context on that device.
 	// Windows specific OpenCL-OpenGL interop

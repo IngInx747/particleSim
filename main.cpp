@@ -6,6 +6,8 @@ const int gWindowWidth = 1280;
 const int gWindowHeight = 720;
 GLFWwindow* gWindow = NULL;
 
+// On my Mac, max local memory space is 65536 B
+// 48 * 1365 = 65520 < 65536 < 65568 = 48 * 1366
 const unsigned int cnt_obj = 1200; // particles number (<= 1365)
 const unsigned int cnt_cell = 1000;
 
